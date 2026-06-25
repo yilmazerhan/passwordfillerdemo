@@ -13,7 +13,12 @@
     "storage",
     "activeTab",
     "scripting",
-    "alarms"
+    "alarms",
+    "tabCapture",
+    "offscreen",
+    "downloads",
+    "tabs",
+    "notifications"
   ],
   "background": {
     "service_worker": "background/worker.js",

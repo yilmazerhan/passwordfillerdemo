@@ -1,11 +1,10 @@
 # Tests
 
-## Unit tests (`unit.mjs`)
-
-Pure-module tests for crypto, generator, and domain matching. No browser needed.
+## Unit tests (no browser)
 
 ```sh
-node tests/unit.mjs
+node tests/unit.mjs           # crypto, generator, domain matching
+node tests/unit-sessions.mjs  # session bookkeeping (domain grouping, stop-on-last-tab)
 ```
 
 ## End-to-end (`e2e.mjs`)
@@ -29,3 +28,25 @@ xvfb-run -a node tests/e2e.mjs
 The test points `executablePath` at the pre-installed Chromium
 (`/opt/pw-browsers/chromium-1194/chrome-linux/chrome`). Loading an extension
 requires full Chromium (not the headless shell), hence `xvfb-run`.
+
+## Recording tests
+
+```sh
+xvfb-run -a node tests/encoding.mjs    # VP9 capture pipeline -> playable WebM (ffmpeg + real decoder)
+xvfb-run -a node tests/offscreen.mjs   # offscreen engine: start/switch/stop -> chrome.downloads
+```
+
+`encoding.mjs` validates the exact `captureStream(0)` + `requestFrame()` + VP9
+technique and plays the result back through Chromium's decoder (Playwright's
+bundled ffmpeg has no VP9 *decoder*, so it's used only to confirm the container
+and stream, not to decode).
+
+`offscreen.mjs` drives `offscreen.js` as shipped, patching only
+`getUserMedia` (test-side, via `addInitScript`) to supply a synthetic stream in
+place of a real tab capture — real `tabCapture` can't be granted in automation
+because it needs a genuine toolbar gesture. It writes incremental results to
+`tests/.offscreen-results.txt` so progress is visible even if the run is killed.
+
+Note: if your shell uses `errexit`, a leading `pkill` that matches nothing exits
+non-zero and aborts the command before the test runs — guard cleanup with
+`|| true`.

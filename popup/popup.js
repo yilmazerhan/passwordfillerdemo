@@ -13,6 +13,9 @@ async function init() {
   [activeTab] = await chrome.tabs.query({ active: true, currentWindow: true });
   activeDomain = activeTab?.url ? extractDomain(activeTab.url) : '';
 
+  // Opening the popup is an action gesture; flush any pending recording start.
+  if (activeTab?.id != null) msg({ type: 'popupReady', tabId: activeTab.id });
+
   const { vault } = await chrome.storage.local.get('vault');
   const status    = await msg({ type: 'getStatus' });
 
@@ -79,8 +82,11 @@ async function renderMatches() {
 function credItem(m) {
   const fillAndClose = async () => {
     const ok = await fillActiveTab(m.id);
-    if (ok) { showToast('Filled ✓'); setTimeout(() => window.close(), 600); }
-    else      showToast('No login fields found on this page.');
+    if (ok) {
+      // Popup fill carries an action gesture, so recording can start immediately.
+      if (activeTab?.id != null) msg({ type: 'recordStart', tabId: activeTab.id });
+      showToast('Filled ✓'); setTimeout(() => window.close(), 600);
+    } else showToast('No login fields found on this page.');
   };
 
   return el('li', { className: 'cred-item', onclick: fillAndClose },

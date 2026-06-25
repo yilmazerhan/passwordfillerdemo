@@ -184,6 +184,8 @@ function pickCredential(id, pair) {
     if (!credential) return;
     if (pair.usernameField) setNativeValue(pair.usernameField, credential.username);
     setNativeValue(pair.passwordField, credential.password);
+    // Begin session recording for this site (may require a toolbar click).
+    chrome.runtime.sendMessage({ type: 'recordStart' });
   });
 }
 
