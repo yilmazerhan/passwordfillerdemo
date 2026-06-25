@@ -99,8 +99,9 @@ button {
   border-top: 1px solid #f0f0f0;
   font-size: 13px;
 }
-.rec-row .rec-label { color: #6b7280; }
-.rec-row .btn-ghost { margin-left: auto; }
+.rec-row .rec-label { color: #6b7280; flex: 1; }
+.btn-stop { background: #ef4444; color: #fff; }
+.btn-stop:hover { background: #dc2626; }
 .rec-dot {
   width: 9px; height: 9px; border-radius: 50%;
   background: #d1d5db; flex-shrink: 0;

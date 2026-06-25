@@ -123,6 +123,26 @@ try {
   check('stop sent after last same-site tab closed', Boolean(stopCmd));
   check('stop targets the same session as start', stopCmd?.sessionId === startCmd?.sessionId);
 
+  // ── Manual "Stop & save" from the popup, while the tab is still open ──
+  const c = await ctx.newPage();
+  await c.route('https://example.org/login', r =>
+    r.fulfill({ contentType: 'text/html', body: '<form><input type=text><input type=password></form>' }));
+  await c.goto('https://example.org/login');
+  const cId = await tabIdOf(c);
+
+  await sendMsg({ type: 'recordStart', tabId: cId });
+  const cStart = (await cmds()).find(x => x.cmd === 'start' && x.sessionId.startsWith('example.org'));
+  check('second session started', (await status(cId))?.state === 'recording-here');
+  check('badge set before manual stop', (await badge(cId)) === '●');
+
+  const stopRes = await sendMsg({ type: 'recordStop', tabId: cId });
+  check('recordStop acknowledged', stopRes?.ok === true);
+  check('manual stop sent for that session',
+    (await cmds()).some(x => x.cmd === 'stop' && x.sessionId === cStart?.sessionId));
+  check('tab is idle after manual stop (tab still open)', (await status(cId))?.state === 'idle');
+  check('badge cleared after manual stop', (await badge(cId)) === '');
+  await c.close();
+
 } catch (err) {
   fail++;
   out('EXCEPTION: ' + (err.stack || err.message));

@@ -60,7 +60,10 @@ function recordingsCard() {
   const list = el('div', { id: 'rec-list' }, el('p', { className: 'hint' }, 'Loading…'));
   loadRecordings(list);
   return el('div', { className: 'card' },
-    el('h2', {}, '🎬 Session recordings'),
+    el('div', { style: 'display:flex;align-items:center;justify-content:space-between;margin-bottom:4px' },
+      el('h2', { style: 'margin:0' }, '🎬 Session recordings'),
+      el('button', { className: 'btn-secondary', onclick: () => loadRecordings(document.getElementById('rec-list')) }, 'Refresh')
+    ),
     el('p', { className: 'hint' }, 'Videos are stored inside the extension. Download or delete them here.'),
     list
   );
@@ -464,6 +467,13 @@ function showErr(el, msg) {
 function faviconChar(domain) {
   return domain ? domain[0].toUpperCase() : '?';
 }
+
+// Refresh the recordings list when returning to this tab (e.g. after stopping a
+// recording from the popup), so a freshly saved video shows up without a reload.
+window.addEventListener('focus', () => {
+  const container = document.getElementById('rec-list');
+  if (container) loadRecordings(container);
+});
 
 // ── boot ──────────────────────────────────────────────────────────────────────
 

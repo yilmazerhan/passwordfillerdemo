@@ -136,6 +136,20 @@ export async function onFill(tabId) {
   return beginSession(domain, tabId);
 }
 
+// Manual stop from the popup: stop the session for this tab's site and save it.
+export async function stopByTab(tabId) {
+  await loadState();
+  const tab = await safeGetTab(tabId);
+  const domain = domainOf(tab?.url);
+  const session = domain && store.get(domain);
+  if (!session) return { ok: false, error: 'not recording' };
+  store.delete(domain);
+  delete pending[domain];
+  await persist();
+  await finalizeStop(session);
+  return { ok: true };
+}
+
 // Popup opened with an action gesture: flush any pending start for its domain.
 export async function onPopupReady(tabId) {
   await loadState();

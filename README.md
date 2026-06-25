@@ -45,9 +45,13 @@ gesture:
   so the result is a **single continuous video file**. To extend the recording to
   another same-site tab, open the popup on it and click **Record here** (each new
   tab needs its own one-time gesture, again because of Chrome's capture rules).
-- **Stop & save** — when you close the **last tab** of that site, the session
-  ends and the video is saved **inside the extension** (IndexedDB), not to your
-  Downloads folder. A notification confirms it.
+- **Stop & save** — two ways, whichever you prefer:
+  - Click **■ Stop & save** in the popup at any time, or
+  - Close the **last tab** of that site.
+
+  Either way the video is saved **inside the extension** (IndexedDB), not to your
+  Downloads folder, and a notification confirms it. (The popup button is the most
+  reliable — it stops and saves immediately, without needing to close tabs.)
 - **Download from the UI** — open the options page → **🎬 Session recordings** to
   Play, **Download** (saves the `.webm` wherever you choose), or Delete each
   recording. Recordings live outside the encrypted vault, so they're available

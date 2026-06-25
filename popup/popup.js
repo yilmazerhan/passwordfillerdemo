@@ -89,13 +89,19 @@ async function recordingRow() {
 
   if (status.state === 'recording-here') {
     row.appendChild(el('span', { className: 'rec-dot live' }));
-    row.appendChild(el('span', {}, 'Recording this tab'));
+    row.appendChild(el('span', { className: 'rec-label' }, 'Recording this tab'));
+    row.appendChild(el('button', {
+      className: 'btn-stop', onclick: () => stopRecording(),
+    }, '■ Stop & save'));
   } else if (status.state === 'recording-other-tab') {
     row.appendChild(el('span', { className: 'rec-dot live' }));
     row.appendChild(el('span', { className: 'rec-label' }, 'Recording this site (another tab)'));
     row.appendChild(el('button', {
       className: 'btn-ghost', onclick: () => startRecording(),
     }, 'Record here'));
+    row.appendChild(el('button', {
+      className: 'btn-stop', onclick: () => stopRecording(),
+    }, '■ Stop & save'));
   } else if (status.state === 'idle') {
     row.appendChild(el('span', { className: 'rec-dot' }));
     row.appendChild(el('span', { className: 'rec-label' }, 'Not recording'));
@@ -110,6 +116,12 @@ async function recordingRow() {
 
 async function startRecording() {
   await msg({ type: 'recordStart', tabId: activeTab.id });
+  renderMatches(); // refresh status row
+}
+
+async function stopRecording() {
+  await msg({ type: 'recordStop', tabId: activeTab.id });
+  showToast('Recording saved — open Manage vault → Recordings');
   renderMatches(); // refresh status row
 }
 
