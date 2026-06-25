@@ -1,1 +1,3 @@
-/* Placeholder — Phase 5 will add fill-icon and picker styles. */
+/* Styles for the shadow host elements injected by inject.js.
+   Inner icon and dropdown styles are inlined inside each Shadow DOM. */
+[data-pf], [data-pf-dd] { all: initial; }
