@@ -1,6 +1,6 @@
 // Service worker: holds decrypted vault in memory, routes messages, manages auto-lock.
 import { encryptVault, decryptVault } from '../lib/crypto.js';
-import { initRecorder, onFill, onPopupReady } from './recorder.js';
+import { initRecorder, onFill, onPopupReady, recordStatus } from './recorder.js';
 
 initRecorder();
 
@@ -126,8 +126,9 @@ chrome.runtime.onMessage.addListener((msg, sender, respond) => {
   (async () => {
     try {
       switch (msg.type) {
-        case 'recordStart': respond(await onFill(msg.tabId ?? sender.tab?.id)); break;
-        case 'popupReady':  respond(await onPopupReady(msg.tabId)); break;
+        case 'recordStart':  respond(await onFill(msg.tabId ?? sender.tab?.id)); break;
+        case 'popupReady':   respond(await onPopupReady(msg.tabId)); break;
+        case 'recordStatus': respond(await recordStatus(msg.tabId)); break;
         case 'unlock':      respond(await unlock(msg.masterPassword)); break;
         case 'lock':        lock(); respond({ ok: true }); break;
         case 'getStatus':   respond(getStatus()); break;

@@ -76,7 +76,41 @@ async function renderMatches() {
   }
   app.appendChild(list);
 
+  app.appendChild(await recordingRow());
   app.appendChild(footer());
+}
+
+// Recording status + control for the active tab.
+async function recordingRow() {
+  const row = el('div', { className: 'rec-row' });
+  if (activeTab?.id == null) return row;
+
+  const status = await msg({ type: 'recordStatus', tabId: activeTab.id });
+
+  if (status.state === 'recording-here') {
+    row.appendChild(el('span', { className: 'rec-dot live' }));
+    row.appendChild(el('span', {}, 'Recording this tab'));
+  } else if (status.state === 'recording-other-tab') {
+    row.appendChild(el('span', { className: 'rec-dot live' }));
+    row.appendChild(el('span', { className: 'rec-label' }, 'Recording this site (another tab)'));
+    row.appendChild(el('button', {
+      className: 'btn-ghost', onclick: () => startRecording(),
+    }, 'Record here'));
+  } else if (status.state === 'idle') {
+    row.appendChild(el('span', { className: 'rec-dot' }));
+    row.appendChild(el('span', { className: 'rec-label' }, 'Not recording'));
+    row.appendChild(el('button', {
+      className: 'btn-ghost', onclick: () => startRecording(),
+    }, '● Record this tab'));
+  } else {
+    return el('div', { className: 'rec-row hidden' }); // unsupported page
+  }
+  return row;
+}
+
+async function startRecording() {
+  await msg({ type: 'recordStart', tabId: activeTab.id });
+  renderMatches(); // refresh status row
 }
 
 function credItem(m) {

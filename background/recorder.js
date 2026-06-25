@@ -1,12 +1,13 @@
 // Session-recording orchestration (service-worker side). Owns session state,
 // tab tracking, the offscreen document, and tabCapture stream acquisition.
 //
-// tabCapture requires a user-gesture / activeTab grant for the target tab, so:
-//  - A fill from the popup (the popup opens via an action click -> activeTab) can
-//    start recording immediately.
-//  - A fill from the in-page icon usually cannot, so we record a "pending" start
-//    and prompt the user to click the toolbar icon once; opening the popup then
-//    flushes the pending start.
+// HARD CONSTRAINT: chrome.tabCapture only works on a tab the extension has been
+// "invoked" on (activeTab) — a toolbar click, context-menu click, or keyboard
+// command. An injected in-page icon click does NOT count. So:
+//  - Recording reliably starts/switches from the POPUP (opening it is an
+//    invocation that grants activeTab for the current tab).
+//  - A fill from the in-page icon cannot capture, so we store a "pending" start
+//    and notify the user to click the toolbar icon; opening the popup flushes it.
 import { domainOf, SessionStore } from '../lib/sessions.js';
 
 const STORE_KEY = 'recSessions';
@@ -60,7 +61,15 @@ function getStreamId(targetTabId) {
 // ── start / switch / stop ──────────────────────────────────────────────────────
 
 async function beginSession(domain, tabId) {
-  if (store.hasDomain(domain)) { store.addTab(domain, tabId); await persist(); return { ok: true }; }
+  // Already recording this site: switch capture to this tab (popup gave a gesture).
+  if (store.hasDomain(domain)) {
+    const session = store.get(domain);
+    store.addTab(domain, tabId);
+    markTab(tabId, true);
+    await persist();
+    if (session.currentTabId !== tabId) await switchTo(session, tabId);
+    return { ok: true };
+  }
 
   let streamId;
   try {
@@ -73,21 +82,27 @@ async function beginSession(domain, tabId) {
     return { ok: false, pending: true };
   }
 
-  await ensureOffscreen();
-  const id = `${domain}-${Date.now()}`;
-  const filename = `PasswordFiller/session-${safe(domain)}-${stamp()}.webm`;
-  const res = await toOffscreen({ cmd: 'start', sessionId: id, streamId, filename });
-  if (!res?.ok) return { ok: false, error: res?.error };
+  try {
+    await ensureOffscreen();
+    const id = `${domain}-${Date.now()}`;
+    const filename = `PasswordFiller/session-${safe(domain)}-${stamp()}.webm`;
+    const res = await toOffscreen({ cmd: 'start', sessionId: id, streamId, filename });
+    if (!res?.ok) throw new Error(res?.error || 'recorder did not start');
 
-  store.create(domain, tabId, id, filename);
-  // Pull in any already-open tabs of the same site.
-  for (const t of await chrome.tabs.query({})) {
-    if (t.id != null && domainOf(t.url) === domain) store.addTab(domain, t.id);
+    store.create(domain, tabId, id, filename);
+    for (const t of await chrome.tabs.query({})) {            // pull in open same-site tabs
+      if (t.id != null && domainOf(t.url) === domain) store.addTab(domain, t.id);
+    }
+    delete pending[domain];
+    await persist();
+    markSessionTabs(store.get(domain), true);
+    notify(`pf-start-${domain}`, '🔴 Recording started',
+      `Recording ${domain}. The video saves automatically when you close the last tab of this site.`);
+    return { ok: true };
+  } catch (err) {
+    notify(`pf-fail-${domain}`, 'Recording could not start', `${domain}: ${err.message}`);
+    return { ok: false, error: err.message };
   }
-  delete pending[domain];
-  await persist();
-  setBadge(true);
-  return { ok: true };
 }
 
 async function switchTo(session, tabId) {
@@ -98,13 +113,17 @@ async function switchTo(session, tabId) {
     await persist();
   } catch {
     // Cannot capture this tab without a gesture; keep recording the previous tab.
-    promptForGesture(session.domain);
+    // (User can click the popup's "Record this tab" to switch capture here.)
   }
 }
 
 async function finalizeStop(session) {
-  await toOffscreen({ cmd: 'stop', sessionId: session.id });
-  if (store.all().length === 0) setBadge(false);
+  markSessionTabs(session, false);
+  const res = await toOffscreen({ cmd: 'stop', sessionId: session.id });
+  if (res?.downloaded) {
+    notify(`pf-saved-${session.id}`, '✅ Recording saved',
+      `Saved to Downloads/${session.filename}`);
+  }
 }
 
 // ── public entry points (called from the worker message router) ───────────────
@@ -127,9 +146,22 @@ export async function onPopupReady(tabId) {
   }
 }
 
+// Recording status for the current tab, used by the popup UI.
+export async function recordStatus(tabId) {
+  await loadState();
+  const tab = await safeGetTab(tabId);
+  const domain = domainOf(tab?.url);
+  if (!domain) return { state: 'unsupported' };
+  const session = store.get(domain);
+  if (!session) return { state: 'idle', domain };
+  return { state: session.currentTabId === tabId ? 'recording-here' : 'recording-other-tab', domain };
+}
+
 // ── tab listeners ──────────────────────────────────────────────────────────────
 
 export function initRecorder() {
+  chrome.action.setBadgeBackgroundColor({ color: '#ef4444' });
+
   chrome.tabs.onActivated.addListener(async ({ tabId }) => {
     await loadState();
     const tab = await safeGetTab(tabId);
@@ -142,13 +174,15 @@ export function initRecorder() {
     await loadState();
     const newDomain = domainOf(tab.url);
     const owner = store.all().find(s => s.tabIds.has(tabId));
-    if (owner && owner.domain !== newDomain) {
+    if (owner && owner.domain !== newDomain) {          // navigated away from its session's site
+      markTab(tabId, false);
       const ended = store.removeTab(tabId);
       await persist();
       if (ended) await finalizeStop(ended);
     }
     if (newDomain && store.hasDomain(newDomain) && !store.get(newDomain).tabIds.has(tabId)) {
-      store.addTab(newDomain, tabId);
+      store.addTab(newDomain, tabId);                   // new same-site tab joins the session
+      markTab(tabId, true);
       await persist();
     }
   });
@@ -161,24 +195,30 @@ export function initRecorder() {
   });
 }
 
+// ── badge / notifications ─────────────────────────────────────────────────────
+
+function markTab(tabId, on) {
+  chrome.action.setBadgeText({ tabId, text: on ? '●' : '' }).catch(() => {});
+  chrome.action.setTitle({ tabId, title: on ? 'Recording this site — Password Filler' : 'Password Filler' }).catch(() => {});
+}
+
+function markSessionTabs(session, on) {
+  if (session) for (const id of session.tabIds) markTab(id, on);
+}
+
+function promptForGesture(domain) {
+  notify(`pf-rec-${domain}`, 'Password Filler — start recording',
+    `Click the Password Filler toolbar icon on this ${domain} tab to record this session.`);
+}
+
+function notify(id, title, message) {
+  chrome.notifications.create(id, { type: 'basic', iconUrl: 'icons/icon128.png', title, message });
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 async function safeGetTab(tabId) {
   try { return await chrome.tabs.get(tabId); } catch { return null; }
-}
-
-function setBadge(on) {
-  chrome.action.setBadgeText({ text: on ? 'REC' : '' });
-  if (on) chrome.action.setBadgeBackgroundColor({ color: '#ef4444' });
-}
-
-function promptForGesture(domain) {
-  chrome.notifications.create(`pf-rec-${domain}`, {
-    type: 'basic',
-    iconUrl: 'icons/icon128.png',
-    title: 'Password Filler — start recording',
-    message: `Click the Password Filler toolbar icon on this ${domain} tab to record this session.`,
-  });
 }
 
 function safe(s)  { return s.replace(/[^a-z0-9.-]/gi, '_'); }

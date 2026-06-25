@@ -89,6 +89,28 @@ button {
   border-top: 1px solid #f0f0f0;
 }
 
+/* ── recording row ── */
+.rec-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #f0f0f0;
+  font-size: 13px;
+}
+.rec-row .rec-label { color: #6b7280; }
+.rec-row .btn-ghost { margin-left: auto; }
+.rec-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #d1d5db; flex-shrink: 0;
+}
+.rec-dot.live {
+  background: #ef4444;
+  animation: pf-pulse 1.4s ease-in-out infinite;
+}
+@keyframes pf-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
 /* ── states ── */
 .error  { color: #ef4444; font-size: 12px; margin-top: 6px; }
 .empty  { text-align: center; color: #9ca3af; padding: 18px 0; font-size: 13px; }

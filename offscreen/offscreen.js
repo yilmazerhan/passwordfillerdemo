@@ -19,10 +19,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
   if (msg.target !== 'offscreen') return;
   (async () => {
     try {
+      let extra = {};
       if (msg.cmd === 'start')       await startSession(msg.sessionId, msg.streamId, msg.filename);
       else if (msg.cmd === 'switch') await switchSource(msg.sessionId, msg.streamId);
-      else if (msg.cmd === 'stop')   await stopSession(msg.sessionId);
-      respond({ ok: true });
+      else if (msg.cmd === 'stop')   extra = await stopSession(msg.sessionId);
+      respond({ ok: true, ...extra });
     } catch (err) {
       respond({ ok: false, error: err.message });
     }
@@ -117,7 +118,7 @@ async function switchSource(sessionId, streamId) {
 
 async function stopSession(sessionId) {
   const session = sessions.get(sessionId);
-  if (!session) return;
+  if (!session) return { downloaded: false };
   sessions.delete(sessionId);
 
   clearInterval(session.drawTimer);
@@ -131,13 +132,14 @@ async function stopSession(sessionId) {
   stopStream(session.currentStream);
   session.track.stop();
 
-  if (session.chunks.length === 0) return; // nothing captured
+  if (session.chunks.length === 0) return { downloaded: false }; // nothing captured
 
   const blob = new Blob(session.chunks, { type: session.mimeType });
   const url  = URL.createObjectURL(blob);
   await chrome.downloads.download({ url, filename: session.filename, saveAs: false });
   // Revoke once the download has had time to read the blob.
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  return { downloaded: true, filename: session.filename, bytes: blob.size };
 }
 
 function stopStream(stream) {
