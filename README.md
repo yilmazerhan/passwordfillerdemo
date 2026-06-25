@@ -45,9 +45,13 @@ gesture:
   so the result is a **single continuous video file**. To extend the recording to
   another same-site tab, open the popup on it and click **Record here** (each new
   tab needs its own one-time gesture, again because of Chrome's capture rules).
-- **Stop & download** — when you close the **last tab** of that site, the session
-  ends and the video downloads to `Downloads/PasswordFiller/`. A notification
-  confirms the save.
+- **Stop & save** — when you close the **last tab** of that site, the session
+  ends and the video is saved **inside the extension** (IndexedDB), not to your
+  Downloads folder. A notification confirms it.
+- **Download from the UI** — open the options page → **🎬 Session recordings** to
+  Play, **Download** (saves the `.webm` wherever you choose), or Delete each
+  recording. Recordings live outside the encrypted vault, so they're available
+  even when the vault is locked.
 - **Format & size** — WebM (VP9), video only, ~8 fps, ~600 kbps, capped at 1280px
   wide. Files stay small while playing in VLC, Chrome/Edge/Firefox, and most
   modern players. (`MediaRecorder` WebM omits a total-duration header, a known
@@ -81,12 +85,13 @@ background/recorder.js  recording sessions: tab tracking, tabCapture, offscreen 
 lib/crypto.js           PBKDF2 key derivation + AES-GCM encrypt/decrypt
 lib/vault.js            domain extraction + registrable-domain matching
 lib/sessions.js         pure session bookkeeping (domain grouping, stop-on-last-tab)
+lib/recordings-db.js    IndexedDB store for saved recordings (meta + blobs)
 lib/generator.js        secure password generation
 content/detect.js       login-form detection (+ MutationObserver for SPAs)
 content/inject.js       Shadow-DOM fill icon + credential dropdown
-offscreen/              hidden recording engine (canvas -> MediaRecorder -> download)
+offscreen/              hidden recording engine (canvas -> MediaRecorder -> IndexedDB)
 popup/                  unlock + per-site matches + click-to-fill / copy
-options/                vault management, generator, settings
+options/                vault management, generator, settings, recordings
 ```
 
 The decrypted vault and derived key live **only in the service worker's memory**

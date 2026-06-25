@@ -1,5 +1,6 @@
 import { generatePassword } from '../lib/generator.js';
 import { extractDomain }   from '../lib/vault.js';
+import { listMeta, getBlob, deleteRecording } from '../lib/recordings-db.js';
 
 const app = document.getElementById('app');
 
@@ -46,6 +47,76 @@ function render() {
   } else {
     app.appendChild(renderVault());
   }
+
+  // Recordings live outside the encrypted vault, so they're always available.
+  if (appState === 'locked' || appState === 'unlocked') {
+    app.appendChild(recordingsCard());
+  }
+}
+
+// ── session recordings ────────────────────────────────────────────────────────
+
+function recordingsCard() {
+  const list = el('div', { id: 'rec-list' }, el('p', { className: 'hint' }, 'Loading…'));
+  loadRecordings(list);
+  return el('div', { className: 'card' },
+    el('h2', {}, '🎬 Session recordings'),
+    el('p', { className: 'hint' }, 'Videos are stored inside the extension. Download or delete them here.'),
+    list
+  );
+}
+
+async function loadRecordings(container) {
+  let recs = [];
+  try { recs = await listMeta(); } catch { /* no db yet */ }
+  container.innerHTML = '';
+  if (recs.length === 0) {
+    container.appendChild(el('p', { className: 'empty-state' }, 'No recordings yet.'));
+    return;
+  }
+  const ul = el('ul', { className: 'entry-list' });
+  recs.forEach(r => ul.appendChild(recItem(r)));
+  container.appendChild(ul);
+}
+
+function recItem(r) {
+  const when = new Date(r.createdAt).toLocaleString();
+  const size = `${(r.size / 1048576).toFixed(1)} MB`;
+  return el('li', { className: 'entry-item' },
+    el('div', { className: 'entry-favicon' }, '🎬'),
+    el('div', { className: 'entry-info' },
+      el('div', { className: 'entry-title' }, r.domain || r.name),
+      el('div', { className: 'entry-meta' }, `${when}  ·  ${size}`)
+    ),
+    el('div', { className: 'entry-actions' },
+      el('button', { className: 'btn-icon', title: 'Play',     onclick: () => playRecording(r) }, '▶️'),
+      el('button', { className: 'btn-icon', title: 'Download', onclick: () => downloadRecording(r) }, '⬇️'),
+      el('button', { className: 'btn-icon', title: 'Delete',   onclick: () => removeRecording(r) }, '🗑️')
+    )
+  );
+}
+
+async function downloadRecording(r) {
+  const blob = await getBlob(r.id);
+  if (!blob) return;
+  const url = URL.createObjectURL(blob);
+  const a = el('a', { href: url, download: r.name });
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}
+
+async function playRecording(r) {
+  const blob = await getBlob(r.id);
+  if (blob) window.open(URL.createObjectURL(blob), '_blank');
+}
+
+async function removeRecording(r) {
+  if (!confirm(`Delete recording "${r.name}"?`)) return;
+  await deleteRecording(r.id);
+  const container = document.getElementById('rec-list');
+  if (container) loadRecordings(container);
 }
 
 // ── setup (first run) ────────────────────────────────────────────────────────

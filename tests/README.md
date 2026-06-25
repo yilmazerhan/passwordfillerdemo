@@ -36,6 +36,7 @@ xvfb-run -a node tests/encoding.mjs      # VP9 capture pipeline -> playable WebM
 xvfb-run -a node tests/offscreen.mjs     # offscreen engine: start/switch/stop -> chrome.downloads
 xvfb-run -a node tests/recording-e2e.mjs # recorder.js orchestration: start, badges, multi-tab join,
                                          #   switch, stop-on-last-tab-close (offscreen transport stubbed)
+xvfb-run -a node tests/recordings-ui.mjs # options Recordings UI: list, download, delete (IndexedDB)
 ```
 
 `encoding.mjs` validates the exact `captureStream(0)` + `requestFrame()` + VP9

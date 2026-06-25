@@ -8,6 +8,10 @@
 //
 // Hidden documents throttle requestAnimationFrame, so we drive frames manually
 // with setInterval + track.requestFrame() on a captureStream(0) track.
+//
+// On stop the video is saved INSIDE the extension (IndexedDB) rather than
+// downloaded; the user downloads it manually from the options page.
+import { addRecording } from '../lib/recordings-db.js';
 
 const FPS        = 8;          // session recordings don't need high fps -> small files
 const MAX_WIDTH  = 1280;       // cap resolution for size
@@ -20,7 +24,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
   (async () => {
     try {
       let extra = {};
-      if (msg.cmd === 'start')       await startSession(msg.sessionId, msg.streamId, msg.filename);
+      if (msg.cmd === 'start')       await startSession(msg.sessionId, msg.streamId, msg.filename, msg.domain);
       else if (msg.cmd === 'switch') await switchSource(msg.sessionId, msg.streamId);
       else if (msg.cmd === 'stop')   extra = await stopSession(msg.sessionId);
       respond({ ok: true, ...extra });
@@ -51,7 +55,7 @@ function pickMimeType() {
   return prefs.find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
 }
 
-async function startSession(sessionId, streamId, filename) {
+async function startSession(sessionId, streamId, filename, domain) {
   if (sessions.has(sessionId)) return; // already recording
 
   const stream = await getTabStream(streamId);
@@ -78,8 +82,8 @@ async function startSession(sessionId, streamId, filename) {
   const chunks = [];
   recorder.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
 
-  const session = { canvas, ctx, track, recorder, chunks, mimeType, filename,
-                    currentVideo: video, currentStream: stream, w, h, drawTimer: null };
+  const session = { id: sessionId, canvas, ctx, track, recorder, chunks, mimeType, filename, domain,
+                    startedAt: Date.now(), currentVideo: video, currentStream: stream, w, h, drawTimer: null };
   sessions.set(sessionId, session);
 
   // Manual frame pump (hidden docs throttle rAF).
@@ -118,7 +122,7 @@ async function switchSource(sessionId, streamId) {
 
 async function stopSession(sessionId) {
   const session = sessions.get(sessionId);
-  if (!session) return { downloaded: false };
+  if (!session) return { saved: false };
   sessions.delete(sessionId);
 
   clearInterval(session.drawTimer);
@@ -132,14 +136,20 @@ async function stopSession(sessionId) {
   stopStream(session.currentStream);
   session.track.stop();
 
-  if (session.chunks.length === 0) return { downloaded: false }; // nothing captured
+  if (session.chunks.length === 0) return { saved: false }; // nothing captured
 
   const blob = new Blob(session.chunks, { type: session.mimeType });
-  const url  = URL.createObjectURL(blob);
-  await chrome.downloads.download({ url, filename: session.filename, saveAs: false });
-  // Revoke once the download has had time to read the blob.
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  return { downloaded: true, filename: session.filename, bytes: blob.size };
+  // basename for display, e.g. "session-example.com-20260625-120000.webm"
+  const name = session.filename.split('/').pop();
+  await addRecording({
+    id:        session.id,
+    name,
+    domain:    session.domain || '',
+    mime:      session.mimeType,
+    size:      blob.size,
+    createdAt: session.startedAt || Date.now(),
+  }, blob);
+  return { saved: true, name, bytes: blob.size };
 }
 
 function stopStream(stream) {

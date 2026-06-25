@@ -33,14 +33,8 @@ try {
   if (!sw) sw = await ctx.waitForEvent('serviceworker', { timeout: 15000 });
   const extId = new URL(sw.url()).host;
 
-  // Spy on chrome.downloads from the service worker.
-  await sw.evaluate(() => {
-    self.__downloads = [];
-    chrome.downloads.onCreated.addListener(d => self.__downloads.push({ url: d.url, filename: d.filename }));
-  });
-
   // Open offscreen.html as an extension page, with getUserMedia patched to a
-  // synthetic 640x360 stream and URL.createObjectURL spied to capture the blob.
+  // synthetic 640x360 stream (stands in for a real tab capture).
   const page = await ctx.newPage();
   await page.addInitScript(() => {
     const canvas = document.createElement('canvas');
@@ -49,9 +43,6 @@ try {
     let n = 0;
     setInterval(() => { cx.fillStyle = `hsl(${(n++ * 7) % 360},70%,50%)`; cx.fillRect(0, 0, 640, 360); }, 50);
     navigator.mediaDevices.getUserMedia = async () => canvas.captureStream(10);
-
-    const realCreate = URL.createObjectURL.bind(URL);
-    URL.createObjectURL = blob => { window.__lastBlob = blob; return realCreate(blob); };
   });
   await page.goto(`chrome-extension://${extId}/offscreen/offscreen.html`);
 
@@ -59,9 +50,9 @@ try {
     chrome.runtime.sendMessage({ target: 'offscreen', ...p }, resp => r(resp))), payload);
 
   const sid = 'test-session';
-  const filename = 'PasswordFiller/test-session.webm';
+  const filename = 'session-example.com-20260625-120000.webm';
 
-  const startRes = await send({ cmd: 'start', sessionId: sid, streamId: 'fake-1', filename });
+  const startRes = await send({ cmd: 'start', sessionId: sid, streamId: 'fake-1', filename, domain: 'example.com' });
   check('start acknowledged', startRes?.ok === true);
 
   await page.waitForTimeout(1200);                       // record segment 1
@@ -70,17 +61,22 @@ try {
 
   await page.waitForTimeout(1200);                       // record segment 2 (same recorder)
   const stopRes = await send({ cmd: 'stop', sessionId: sid });
-  check('stop acknowledged (download did not throw)', stopRes?.ok === true);
+  check('stop acknowledged + saved', stopRes?.ok === true && stopRes?.saved === true);
 
-  // A download was requested.
-  const dls = await sw.evaluate(() => self.__downloads);
-  check('chrome.downloads.download was called', dls.length === 1);
-  check('download used a blob: URL', /^blob:/.test(dls[0]?.url || ''));
+  // The recording was saved to IndexedDB; read meta + blob and play it back.
+  const result = await page.evaluate(async (id) => {
+    const db = await new Promise((res, rej) => {
+      const r = indexedDB.open('pf-recordings');
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+    const get = (store, key) => new Promise((res, rej) => {
+      const rq = db.transaction(store, 'readonly').objectStore(store).get(key);
+      rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error);
+    });
+    const meta = await get('meta', id);
+    const blob = await get('blobs', id);
+    if (!blob) return { hasMeta: !!meta, hasBlob: false };
 
-  // The captured blob is a single, playable WebM spanning the switch.
-  const playback = await page.evaluate(async () => {
-    const blob = window.__lastBlob;
-    if (!blob) return { error: 'no blob captured' };
     const url = URL.createObjectURL(blob);
     const v = document.createElement('video');
     v.src = url; v.muted = true;
@@ -95,13 +91,16 @@ try {
       v.addEventListener('timeupdate', h);
       setTimeout(() => res(v.currentTime > 0.1), 3000);
     });
-    return { size: blob.size, type: blob.type, w: v.videoWidth, h: v.videoHeight, advanced };
-  });
+    return { hasMeta: !!meta, metaName: meta?.name, metaDomain: meta?.domain,
+             hasBlob: true, type: blob.type, size: blob.size, w: v.videoWidth, h: v.videoHeight, advanced };
+  }, sid);
 
-  check('blob is a webm', /webm/.test(playback.type || ''));
-  check('blob is non-empty', playback.size > 0);
-  check('recording plays back (real decoder)', playback.advanced === true);
-  check('canvas size preserved (640x360)', playback.w === 640 && playback.h === 360);
+  check('metadata saved to IndexedDB', result.hasMeta && result.metaName === filename && result.metaDomain === 'example.com');
+  check('blob saved to IndexedDB', result.hasBlob === true);
+  check('saved blob is a webm', /webm/.test(result.type || ''));
+  check('saved blob is non-empty', result.size > 0);
+  check('saved recording plays back (real decoder)', result.advanced === true);
+  check('canvas size preserved (640x360)', result.w === 640 && result.h === 360);
 
 } catch (err) {
   fail++;

@@ -49,7 +49,7 @@ try {
     chrome.runtime.sendMessage = (msg, cb) => {
       if (msg && msg.target === 'offscreen') {
         self.__cmds.push({ cmd: msg.cmd, sessionId: msg.sessionId, filename: msg.filename });
-        return Promise.resolve(msg.cmd === 'stop' ? { ok: true, downloaded: true, filename: 'stub' } : { ok: true });
+        return Promise.resolve(msg.cmd === 'stop' ? { ok: true, saved: true, name: 'stub' } : { ok: true });
       }
       return realSend(msg, cb);
     };
@@ -81,8 +81,8 @@ try {
 
   const startCmd = (await cmds()).find(c => c.cmd === 'start');
   check('start command sent to offscreen', Boolean(startCmd));
-  check('filename matches PasswordFiller/session-<domain>-<stamp>.webm',
-    /PasswordFiller\/session-example\.com-\d{8}-\d{6}\.webm/.test(startCmd?.filename || ''));
+  check('filename matches session-<domain>-<stamp>.webm',
+    /^session-example\.com-\d{8}-\d{6}\.webm$/.test(startCmd?.filename || ''));
   check('tab A shows recording status', (await status(aId))?.state === 'recording-here');
   check('tab A has recording badge', (await badge(aId)) === '●');
 

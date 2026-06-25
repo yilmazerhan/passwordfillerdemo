@@ -85,8 +85,8 @@ async function beginSession(domain, tabId) {
   try {
     await ensureOffscreen();
     const id = `${domain}-${Date.now()}`;
-    const filename = `PasswordFiller/session-${safe(domain)}-${stamp()}.webm`;
-    const res = await toOffscreen({ cmd: 'start', sessionId: id, streamId, filename });
+    const filename = `session-${safe(domain)}-${stamp()}.webm`;
+    const res = await toOffscreen({ cmd: 'start', sessionId: id, streamId, filename, domain });
     if (!res?.ok) throw new Error(res?.error || 'recorder did not start');
 
     store.create(domain, tabId, id, filename);
@@ -120,9 +120,9 @@ async function switchTo(session, tabId) {
 async function finalizeStop(session) {
   markSessionTabs(session, false);
   const res = await toOffscreen({ cmd: 'stop', sessionId: session.id });
-  if (res?.downloaded) {
+  if (res?.saved) {
     notify(`pf-saved-${session.id}`, '✅ Recording saved',
-      `Saved to Downloads/${session.filename}`);
+      `Recording of ${session.domain} is saved in the extension. Open Password Filler options → Recordings to download it.`);
   }
 }
 
