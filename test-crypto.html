@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Crypto round-trip test</title>
+</head>
+<body>
+  <pre id="out"></pre>
+  <script type="module">
+    import { encryptVault, decryptVault } from './lib/crypto.js';
+
+    const log = msg => { document.getElementById('out').textContent += msg + '\n'; };
+    const vault = [{ id: '1', title: 'Test', username: 'alice', password: 's3cr3t' }];
+
+    // correct password round-trip
+    const { ciphertext, key } = await encryptVault(vault, 'myMasterPassword');
+    const { vault: v2 }       = await decryptVault(ciphertext, 'myMasterPassword');
+    log('Round-trip OK: ' + (JSON.stringify(vault) === JSON.stringify(v2)));
+
+    // re-encrypt with existing key
+    const { ciphertext: ct2 } = await encryptVault(vault, null, key);
+    const { vault: v3 }       = await decryptVault({ ...ct2, salt: ciphertext.salt }, 'myMasterPassword');
+    log('Re-encrypt with key OK: ' + (JSON.stringify(vault) === JSON.stringify(v3)));
+
+    // wrong password must throw
+    try {
+      await decryptVault(ciphertext, 'wrongPassword');
+      log('FAIL: wrong password should have thrown');
+    } catch {
+      log('Wrong-password rejection OK');
+    }
+  </script>
+</body>
+</html>
