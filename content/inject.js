@@ -1,4 +1,7 @@
-import { findLoginPairs, watchForForms } from './detect.js';
+// Click-to-fill icon + credential dropdown. Classic content script; reads
+// detection helpers from the shared namespace set up by detect.js.
+(() => {
+const { findLoginPairs, watchForForms } = self.__pwFiller;
 
 // ── SVG key icon ─────────────────────────────────────────────────────────────
 
@@ -206,3 +209,4 @@ function esc(str) {
     .replace(/&/g, '&amp;').replace(/</g, '&lt;')
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
+})();

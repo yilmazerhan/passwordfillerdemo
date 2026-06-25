@@ -16,7 +16,8 @@
     "alarms"
   ],
   "background": {
-    "service_worker": "background/worker.js"
+    "service_worker": "background/worker.js",
+    "type": "module"
   },
   "action": {
     "default_popup": "popup/popup.html",
@@ -34,10 +35,9 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": ["content/inject.js"],
+      "js": ["content/detect.js", "content/inject.js"],
       "css": ["content/content.css"],
-      "run_at": "document_idle",
-      "type": "module"
+      "run_at": "document_idle"
     }
   ]
 }

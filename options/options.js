@@ -120,7 +120,70 @@ function renderVault() {
   // add / edit form card
   frag.appendChild(renderEntryForm());
 
+  // settings card
+  frag.appendChild(renderSettingsCard());
+
   return frag;
+}
+
+// ── settings (auto-lock + change master password) ────────────────────────────
+
+function renderSettingsCard() {
+  // auto-lock minutes
+  const lockEl = el('input', { type: 'number', min: '0', max: '240', style: 'width:80px' });
+  chrome.storage.local.get('lockMinutes').then(({ lockMinutes = 15 }) => { lockEl.value = lockMinutes; });
+  const lockSaved = el('span', { className: 'hint hidden' }, 'Saved ✓');
+
+  const lockRow = el('div', { className: 'field' },
+    el('label', {}, 'Auto-lock after (minutes of inactivity — 0 disables)'),
+    el('div', { style: 'display:flex;align-items:center;gap:10px' },
+      lockEl,
+      el('button', {
+        type: 'button', className: 'btn-secondary',
+        onclick: async () => {
+          const minutes = Math.max(0, Math.min(240, parseInt(lockEl.value, 10) || 0));
+          lockEl.value = minutes;
+          await msg({ type: 'setLockMinutes', minutes });
+          lockSaved.classList.remove('hidden');
+          setTimeout(() => lockSaved.classList.add('hidden'), 1500);
+        }
+      }, 'Save'),
+      lockSaved
+    )
+  );
+
+  // change master password
+  const oldEl  = el('input', { type: 'password', placeholder: 'Current password' });
+  const new1El = el('input', { type: 'password', placeholder: 'New password' });
+  const new2El = el('input', { type: 'password', placeholder: 'Confirm new password' });
+  const cpErr  = el('p', { className: 'error hidden' });
+  const cpOk   = el('p', { className: 'hint hidden' }, 'Master password changed ✓');
+
+  const cpForm = el('form', {
+    onsubmit: async e => {
+      e.preventDefault();
+      cpErr.classList.add('hidden'); cpOk.classList.add('hidden');
+      if (new1El.value.length < 8)      { showErr(cpErr, 'New password must be at least 8 characters.'); return; }
+      if (new1El.value !== new2El.value) { showErr(cpErr, 'New passwords do not match.'); return; }
+      const res = await msg({ type: 'changeMasterPassword', oldPassword: oldEl.value, newPassword: new1El.value });
+      if (!res.ok) { showErr(cpErr, res.error); return; }
+      oldEl.value = new1El.value = new2El.value = '';
+      cpOk.classList.remove('hidden');
+    }
+  },
+    el('div', { className: 'field' }, el('label', {}, 'Current password'), oldEl),
+    el('div', { className: 'field' }, el('label', {}, 'New password'), new1El),
+    el('div', { className: 'field' }, el('label', {}, 'Confirm new password'), new2El),
+    cpErr, cpOk,
+    el('div', { className: 'row-actions' }, el('button', { type: 'submit', className: 'btn-secondary' }, 'Change password'))
+  );
+
+  return el('div', { className: 'card' },
+    el('h2', {}, 'Settings'),
+    lockRow,
+    el('h2', { style: 'margin-top:24px' }, 'Change master password'),
+    cpForm
+  );
 }
 
 function renderEntryListCard() {

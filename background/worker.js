@@ -6,8 +6,10 @@ const DEFAULT_LOCK_MINUTES = 15;
 
 let state = {
   locked: true,
-  key: null,       // CryptoKey — never persisted
-  vault: null,     // decrypted vault array
+  key: null,        // CryptoKey — never persisted
+  vault: null,      // decrypted vault array
+  salt: null,       // b64 salt of the stored blob (needed to re-store on save)
+  iterations: null, // PBKDF2 iterations of the stored blob
 };
 
 // ── public helpers ──────────────────────────────────────────────────────────
@@ -18,13 +20,17 @@ async function unlock(masterPassword) {
     // First run — create empty vault
     const { ciphertext, key } = await encryptVault([], masterPassword);
     await chrome.storage.local.set({ vault: ciphertext });
-    state = { locked: false, key, vault: [] };
+    state = { locked: false, key, vault: [], salt: ciphertext.salt, iterations: ciphertext.iterations };
     scheduleAutolock();
     return { ok: true, firstRun: true };
   }
   try {
     const { vault, key } = await decryptVault(stored.vault, masterPassword);
-    state = { locked: false, key, vault };
+    state = {
+      locked: false, key, vault,
+      salt: stored.vault.salt,
+      iterations: stored.vault.iterations,
+    };
     scheduleAutolock();
     return { ok: true, firstRun: false };
   } catch {
@@ -33,14 +39,36 @@ async function unlock(masterPassword) {
 }
 
 function lock() {
-  state = { locked: true, key: null, vault: null };
+  state = { locked: true, key: null, vault: null, salt: null, iterations: null };
   chrome.alarms.clear(LOCK_ALARM);
 }
 
 async function saveVault() {
   if (state.locked) throw new Error('Vault is locked');
   const { ciphertext } = await encryptVault(state.vault, null, state.key);
+  // encryptVault with an existing key produces no salt; restore the original
+  // salt/iterations so the next unlock can re-derive the key.
+  ciphertext.salt = state.salt;
+  ciphertext.iterations = state.iterations;
   await chrome.storage.local.set({ vault: ciphertext });
+}
+
+async function changeMasterPassword(oldPassword, newPassword) {
+  const stored = await chrome.storage.local.get('vault');
+  if (!stored.vault) return { ok: false, error: 'No vault to change.' };
+  // Verify the old password by decrypting.
+  let vault;
+  try {
+    ({ vault } = await decryptVault(stored.vault, oldPassword));
+  } catch {
+    return { ok: false, error: 'Current password is incorrect.' };
+  }
+  // Re-encrypt with a fresh key + salt derived from the new password.
+  const { ciphertext, key } = await encryptVault(vault, newPassword);
+  await chrome.storage.local.set({ vault: ciphertext });
+  state = { locked: false, key, vault, salt: ciphertext.salt, iterations: ciphertext.iterations };
+  scheduleAutolock();
+  return { ok: true };
 }
 
 function getMatches(domain) {
@@ -59,7 +87,7 @@ async function saveEntry(entry) {
   if (state.locked) throw new Error('Vault is locked');
   const idx = state.vault.findIndex(e => e.id === entry.id);
   if (idx >= 0) {
-    state.vault[idx] = { ...entry, updatedAt: Date.now() };
+    state.vault[idx] = { ...state.vault[idx], ...entry, updatedAt: Date.now() };
   } else {
     state.vault.push({ ...entry, createdAt: Date.now(), updatedAt: Date.now() });
   }
@@ -80,7 +108,8 @@ function getStatus() {
 
 async function scheduleAutolock() {
   const { lockMinutes = DEFAULT_LOCK_MINUTES } = await chrome.storage.local.get('lockMinutes');
-  chrome.alarms.create(LOCK_ALARM, { delayInMinutes: lockMinutes });
+  chrome.alarms.clear(LOCK_ALARM);
+  if (lockMinutes > 0) chrome.alarms.create(LOCK_ALARM, { delayInMinutes: lockMinutes });
 }
 
 chrome.alarms.onAlarm.addListener(alarm => {
@@ -100,8 +129,17 @@ chrome.runtime.onMessage.addListener((msg, _sender, respond) => {
         case 'getCredential': respond({ credential: getCredential(msg.id) }); break;
         case 'saveEntry':   await saveEntry(msg.entry); respond({ ok: true }); break;
         case 'deleteEntry': await deleteEntry(msg.id);  respond({ ok: true }); break;
-        case 'getAll':      respond({ entries: state.locked ? null : state.vault.map(({ id, title, username, domain, url, notes }) => ({ id, title, username, domain, url, notes })) }); break;
-        default:            respond({ error: 'Unknown message type' });
+        case 'changeMasterPassword': respond(await changeMasterPassword(msg.oldPassword, msg.newPassword)); break;
+        case 'setLockMinutes':
+          await chrome.storage.local.set({ lockMinutes: msg.minutes });
+          if (!state.locked) scheduleAutolock();
+          respond({ ok: true });
+          break;
+        case 'getAll':
+          respond({ entries: state.locked ? null : state.vault.map(
+            ({ id, title, username, domain, url, notes }) => ({ id, title, username, domain, url, notes })) });
+          break;
+        default: respond({ error: 'Unknown message type' });
       }
     } catch (err) {
       respond({ error: err.message });
