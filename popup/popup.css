@@ -1,0 +1,120 @@
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  width: 340px;
+  margin: 0;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  color: #1d1d1f;
+  background: #fff;
+}
+
+#app { padding: 14px; }
+
+/* ── header ── */
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.head .title { font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 6px; }
+
+.head .domain {
+  font-size: 12px;
+  color: #6b7280;
+  max-width: 150px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ── forms / inputs ── */
+input[type="password"], input[type="text"] {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d2d2d7;
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+}
+input:focus { border-color: #4f46e5; }
+
+/* ── buttons ── */
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 12px;
+}
+.btn-primary   { background: #4f46e5; color: #fff; width: 100%; margin-top: 8px; }
+.btn-primary:hover { background: #4338ca; }
+.btn-ghost     { background: transparent; color: #4f46e5; padding: 2px 4px; font-size: 12px; }
+.btn-icon      { background: transparent; padding: 3px 5px; font-size: 14px; }
+
+/* ── credential list ── */
+.cred-list { list-style: none; margin: 8px 0 0; padding: 0; }
+
+.cred-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .1s;
+}
+.cred-item:hover { background: #f3f4f6; }
+
+.cred-favicon {
+  width: 26px; height: 26px;
+  background: #e5e7eb;
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; flex-shrink: 0;
+}
+.cred-info { flex: 1; min-width: 0; }
+.cred-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cred-user  { font-size: 12px; color: #6b7280; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cred-actions { display: flex; gap: 2px; flex-shrink: 0; }
+
+/* ── footer ── */
+.foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #f0f0f0;
+}
+
+/* ── recording row ── */
+.rec-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #f0f0f0;
+  font-size: 13px;
+}
+.rec-row .rec-label { color: #6b7280; flex: 1; }
+.btn-stop { background: #ef4444; color: #fff; }
+.btn-stop:hover { background: #dc2626; }
+.rec-dot {
+  width: 9px; height: 9px; border-radius: 50%;
+  background: #d1d5db; flex-shrink: 0;
+}
+.rec-dot.live {
+  background: #ef4444;
+  animation: pf-pulse 1.4s ease-in-out infinite;
+}
+@keyframes pf-pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+/* ── states ── */
+.error  { color: #ef4444; font-size: 12px; margin-top: 6px; }
+.empty  { text-align: center; color: #9ca3af; padding: 18px 0; font-size: 13px; }
+.toast  { text-align: center; color: #065f46; background: #ecfdf5; border-radius: 8px; padding: 8px; font-size: 13px; margin-top: 8px; }
+.hint   { color: #6b7280; font-size: 12px; }
+.hidden { display: none !important; }
